@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Фотокамера</title>
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Камера">
+<link rel="manifest" type="application/manifest+json" href="manifest.webmanifest">
+<link rel="icon" href="icon-512.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: #000; color: #fff;
+    font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+    position: fixed; inset: 0; overflow: hidden;
+    touch-action: manipulation; overscroll-behavior: none;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  }
+  .view { position: fixed; inset: 0; }
+  #video {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; background: #000;
+  }
+  #flash {
+    position: absolute; inset: 0; background: #fff; opacity: 0;
+    pointer-events: none; transition: opacity .12s ease-out;
+  }
+  #flash.on { opacity: .85; }
+  #keyfocus { position: fixed; left: -100px; top: 0; width: 1px; height: 1px; opacity: 0; }
+  #topbar {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; gap: 8px;
+    padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+    pointer-events: none; z-index: 5;
+  }
+  .chip {
+    background: rgba(0,0,0,.55); border-radius: 999px;
+    padding: 7px 14px; font-size: 14px; font-weight: 600;
+    white-space: nowrap;
+  }
+  #counter { min-width: 88px; text-align: center; }
+  #uploadStatus { color: #9ad99a; }
+  .spacer { flex: 1; }
+  .topbtn {
+    pointer-events: auto; width: 40px; height: 40px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.55);
+    color: #fff; font-size: 18px; line-height: 1;
+  }
+  #bottombar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    display: flex; justify-content: center; align-items: center;
+    padding: 10px 16px calc(26px + env(safe-area-inset-bottom));
+    z-index: 5;
+  }
+  #shutter {
+    width: 78px; height: 78px; border-radius: 50%;
+    border: 4px solid #fff; background: rgba(255,255,255,.25);
+    box-shadow: 0 0 0 4px rgba(0,0,0,.35);
+  }
+  #shutter:active { background: rgba(255,255,255,.75); transform: scale(.94); }
+  #hint {
+    position: absolute; left: 0; right: 0; bottom: 130px; z-index: 6;
+    text-align: center; color: #fff; background: rgba(160,40,40,.88);
+    padding: 12px; margin: 0 16px; border-radius: 12px; font-size: 14px;
+  }
+  #gallery-view { background: #0d1117; display: flex; flex-direction: column; }
+  #gallery-view header {
+    display: flex; align-items: center; gap: 12px;
+    padding: calc(12px + env(safe-area-inset-top)) 14px 12px;
+    border-bottom: 1px solid #222; flex: none;
+  }
+  #gallery-view header h2 { margin: 0; font-size: 17px; }
+  #backBtn {
+    background: #21262d; color: #fff; border: none; border-radius: 10px;
+    padding: 9px 14px; font-size: 15px;
+  }
+  #logoutBtn {
+    margin-left: auto; background: #21262d; color: #fff; border: none;
+    border-radius: 10px; padding: 9px 14px; font-size: 15px;
+  }
+  #thumbs {
+    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px;
+    padding: 2px; align-content: start;
+  }
+  .cell { aspect-ratio: 1; background: #161b22; overflow: hidden; }
+  .cell img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .25s; }
+  .cell.ready img { opacity: 1; }
+  .cell.failed { opacity: .4; }
+  .loading { grid-column: 1 / -1; color: #8b949e; text-align: center; padding: 30px 10px; font-size: 14px; }
+  #lightbox {
+    position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 20;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: env(safe-area-inset-top) 0 calc(20px + env(safe-area-inset-bottom));
+  }
+  #lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  #lightboxClose {
+    margin-top: 14px; background: #21262d; color: #fff; border: none;
+    border-radius: 10px; padding: 10px 20px; font-size: 15px;
+  }
+  /* --- экран входа --- */
+  #login-view {
+    background: #0d1117; display: flex; align-items: center; justify-content: center;
+    padding: 24px; z-index: 50;
+  }
+  #login-card {
+    width: 100%; max-width: 340px; background: #161b22; border: 1px solid #30363d;
+    border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 12px;
+  }
+  #login-card h2 { margin: 0 0 4px; font-size: 20px; text-align: center; }
+  #login-card p { margin: 0; color: #8b949e; font-size: 13px; text-align: center; }
+  #login-card input {
+    font-size: 17px; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid #30363d; background: #010409; color: #fff;
+  }
+  #login-card button {
+    font-size: 17px; padding: 13px; border-radius: 10px; border: none;
+    background: #238636; color: #fff; font-weight: 600;
+  }
+  #login-card button:disabled { opacity: .6; }
+  #login-card .link {
+    background: none; border: 0; color: #8b949e; font-size: 14px;
+    padding: 6px; cursor: pointer;
+  }
+  #login-error { color: #ff8b8b; font-size: 13px; min-height: 18px; text-align: center; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="view" id="login-view" hidden>
+    <form id="login-card">
+      <h2 id="login-title">Вход</h2>
+      <p>Один раз на этом устройстве. Дальше всё автоматически.</p>
+      <input id="login-email" type="email" placeholder="email" autocomplete="username" autocapitalize="off" required>
+      <input id="login-password" type="password" placeholder="пароль" autocomplete="current-password" required>
+      <button id="login-btn" type="submit">Войти</button>
+      <div id="login-error"></div>
+      <button class="link" id="login-switch" type="button">Нет аккаунта? Зарегистрироваться</button>
+    </form>
+  </div>
+
+  <div class="view" id="camera-view">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" hidden></canvas>
+    <div id="flash"></div>
+    <input id="keyfocus" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" readonly inputmode="none">
+    <div id="topbar">
+      <div class="chip" id="counter">Фото: 0</div>
+      <div class="chip" id="uploadStatus">—</div>
+      <div class="spacer"></div>
+      <button class="topbtn" id="flipBtn" aria-label="Переключить камеру">🔄</button>
+      <button class="topbtn" id="galleryBtn" aria-label="Лента">🖼</button>
+    </div>
+    <div id="bottombar">
+      <button id="shutter" aria-label="Сфоткать"></button>
+    </div>
+    <div id="hint" hidden></div>
+  </div>
+
+  <div class="view" id="gallery-view" hidden>
+    <header>
+      <button id="backBtn">← Камера</button>
+      <h2>Лента</h2>
+      <button id="logoutBtn">Выйти</button>
+    </header>
+    <div id="thumbs"></div>
+  </div>
+
+  <div id="lightbox" hidden>
+    <img id="lightboxImg" alt="Фото">
+    <button id="lightboxClose">Закрыть</button>
+  </div>
+
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
